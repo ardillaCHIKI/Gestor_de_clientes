@@ -12,40 +12,61 @@ class Cliente:
 class Clientes:
     # Creamos la lista y cargamos los clientes en memoria
     lista = []
-    with open(config.DATABASE_PATH, newline="\n") as fichero:
-        reader = csv.reader(fichero, delimiter=";")
-        for dni, nombre, apellido in reader:
-            cliente = Cliente(dni, nombre, apellido)
-            lista.append(cliente)
 
-    @staticmethod
-    def crear(dni, nombre, apellido):
+    @classmethod
+    def cargar(cls):
+        cls.lista_clientes.clear()
+        try:
+            with open(config.DATABASE_PATH, newline="\n") as fichero:
+                reader = csv.reader(fichero, delimiter=";")
+                for dni, nombre, apellido in reader:
+                    cliente = Cliente(dni, nombre, apellido)
+                    cls.lista_clientes.append(cliente)
+        except FileNotFoundError:
+            cls.lista_clientes = []
+
+    @classmethod
+    def buscar(cls, dni):
+        for cliente in cls.lista_clientes:
+            if cliente.dni == dni:
+                return cliente
+        return None
+
+    @classmethod
+    def crear(cls, dni, nombre, apellido):
         cliente = Cliente(dni, nombre, apellido)
-        Clientes.lista.append(cliente)
-        Clientes.guardar() # new
+        cls.lista_clientes.append(cliente)
+        cls.guardar()
         return cliente
             
-    @staticmethod
-    def modificar(dni, nombre, apellido):
-        for i, cliente in enumerate(Clientes.lista):
+    @classmethod
+    def modificar(cls, dni, nombre, apellido):
+        for i, cliente in enumerate(cls.lista_clientes):
             if cliente.dni == dni:
-                Clientes.lista[i].nombre = nombre
-                Clientes.lista[i].apellido = apellido
-                Clientes.guardar() # new
-                return Clientes.lista[i]
+                cls.lista_clientes[i].nombre = nombre
+                cls.lista_clientes[i].apellido = apellido
+                cls.guardar()
+                return cls.lista_clientes[i]
+        return None
     
-    @staticmethod
-    def borrar(dni):
-        for i, cliente in enumerate(Clientes.lista):
+    @classmethod
+    def borrar(cls, dni):
+        for i, cliente in enumerate(cls.lista_clientes):
             if cliente.dni == dni:
-                cliente = Clientes.lista.pop(i)
-                Clientes.guardar() # new
+                cliente = cls.lista_clientes.pop(i)
+                cls.guardar()
                 return cliente
+        return None
     
-    @staticmethod
-    def guardar():
+    @classmethod
+    def guardar(cls):
         with open(config.DATABASE_PATH, "w", newline="\n") as fichero:
             writer = csv.writer(fichero, delimiter=";")
-            for c in Clientes.lista:
+            for c in cls.lista_clientes:
                 writer.writerow((c.dni, c.nombre, c.apellido))
 
+    def __init__(self):
+        self.cargar()                
+
+### Cargar los clientes al importar el módulo
+Clientes.cargar()
