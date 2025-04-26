@@ -1,241 +1,146 @@
-from tkinter import *
-from tkinter import ttk
-import database as db
-from tkinter.messagebox import askokcancel, WARNING
-import helpers
-from helpers import CenterWidgetMixin
+import gradio as gr
+import gestor.database as db
+import gestor.helpers as helpers
+import pandas as pd
+import sys
 
-class CreateClientWindow(Toplevel, CenterWidgetMixin):
-    def __init__(self, parent):
-        super().__init__(parent)
-        self.title('Crear cliente')
-        self.build()
-        self.center()
+def listar_clientes():
+    if not db.Clientes.lista_clientes:
+        return "No hay clientes registrados.", None
+    # Convertir la lista de clientes a un DataFrame para mostrar como tabla
+    data = [(c.dni, c.nombre, c.apellido) for c in db.Clientes.lista_clientes]
+    df = pd.DataFrame(data, columns=["DNI", "Nombre", "Apellido"])
+    return "Lista de clientes:", df
 
-        # Obligar al usuario a interactuar con la subventana
-        self.transient(parent)
-        self.grab_set()
+def buscar_cliente(dni):
+    if not dni:
+        return "Por favor, ingresa un DNI."
+    dni = dni.upper()
+    if not helpers.dni_valido(dni, []):  # Solo validar formato, no duplicados
+        return "DNI inválido. Debe tener el formato: 2 dígitos + 1 letra (ej. 12A)."
+    cliente = db.Clientes.buscar(dni)
+    return f"Cliente encontrado: {cliente}" if cliente else "Cliente no encontrado."
 
-    def build(self):
-        # Top frame
-        frame = Frame(self)
-        frame.pack(padx=20, pady=10)
+def validar_dni(dni, lista):
+    if not helpers.dni_valido(dni, lista):
+        return False, "DNI inválido o ya existe. Debe tener el formato: 2 dígitos + 1 letra (ej. 12A) y no estar registrado."
+    return True, ""
 
-        # Labels
-        Label(frame, text="DNI (2 ints y 1 upper char)").grid(row=0,column=0)
-        Label(frame, text="Nombre (2 a 30 chars)").grid(row=0,column=1)
-        Label(frame, text="Apellido (2 a 30 chars)").grid(row=0,column=2)
+import re
 
-        # Entries and validations
-        dni = Entry(frame)
-        dni.grid(row=1, column=0)
-        dni.bind("<KeyRelease>", lambda ev: self.validate(ev, 0))
-        nombre = Entry(frame)
-        nombre.grid(row=1, column=1)
-        nombre.bind("<KeyRelease>", lambda ev: self.validate(ev, 1))
-        apellido = Entry(frame)
-        apellido.grid(row=1, column=2)
-        apellido.bind("<KeyRelease>", lambda ev: self.validate(ev, 2))
+def validar_texto(texto, campo, min_len=2, max_len=30):
+    # Allow letters (including accented) and spaces
+    pattern = r'^[A-Za-zÁÉÍÓÚáéíóúÑñÜü\s]+$'
+    if not re.match(pattern, texto) or len(texto) < min_len or len(texto) > max_len:
+        return False, f"{campo} debe tener solo letras y espacios, y entre {min_len} y {max_len} caracteres."
+    return True, ""
 
-        # Bottom frame
-        frame = Frame(self)
-        frame.pack(pady=10)
+def añadir_cliente(dni, nombre, apellido):
+    if not dni or not nombre or not apellido:
+        return "Por favor, completa todos los campos."
+    dni = dni.upper()
+    nombre = nombre.capitalize()
+    apellido = apellido.capitalize()
 
-        # Buttons
-        crear = Button(frame, text="Crear", command=self.create_client)
-        crear.configure(state=DISABLED)
-        crear.grid(row=0, column=0)
-        Button(frame, text="Cancelar", command=self.close).grid(row=0,column=1)
+    # Validar DNI
+    dni_valido, dni_error = validar_dni(dni, db.Clientes.lista_clientes)
+    if not dni_valido:
+        return dni_error
 
-        # Create button activation
-        self.validaciones = [0, 0, 0] # False, False, False
+    # Validar nombre
+    nombre_valido, nombre_error = validar_texto(nombre, "Nombre")
+    if not nombre_valido:
+        return nombre_error
 
-        # Class exports
-        self.crear = crear
-        self.dni = dni
-        self.nombre = nombre
-        self.apellido = apellido
+    # Validar apellido
+    apellido_valido, apellido_error = validar_texto(apellido, "Apellido")
+    if not apellido_valido:
+        return apellido_error
 
-    def validate(self, event, index):
-        valor = event.widget.get()
-        # Validar el dni si es el primer campo o textual para los otros dos
-        valido = helpers.dni_valido(valor, db.Clientes.lista) if index == 0 \
-        else (valor.isalpha() and len(valor) >= 2 and len(valor) <= 30)
-        event.widget.configure({"bg": "Green" if valido else "Red"})
-        # Cambiar estado del botón en base a las validaciones
-        self.validaciones[index] = valido
-        self.crear.config(state=NORMAL if self.validaciones == [1, 1, 1] else DISABLED)
-    
-    def create_client(self):
-        self.master.treeview.insert(
-        parent='', index='end', iid=self.dni.get(),
-        values=(self.dni.get(), self.nombre.get(),
-        self.apellido.get()))
-        # !!! Crear también en el fichero
-        db.Clientes.crear(self.dni.get(), self.nombre.get(),
-        self.apellido.get())
-        self.close()
+    # Crear cliente
+    db.Clientes.crear(dni, nombre, apellido)
+    return "Cliente añadido correctamente."
 
-    def close(self):
-        self.destroy()
-        self.update()
+def modificar_cliente(dni, nombre, apellido):
+    if not dni or not nombre or not apellido:
+        return "Por favor, completa todos los campos."
+    dni = dni.upper()
+    nombre = nombre.capitalize()
+    apellido = apellido.capitalize()
 
-class EditClientWindow(Toplevel, CenterWidgetMixin):
-    def __init__(self, parent):
-        super().__init__(parent)
-        self.title('Actualizar cliente')
-        self.build()
-        self.center()
-        # Obligar al usuario a interactuar con la subventana
-        self.transient(parent)
-        self.grab_set()
+    # Verificar que el cliente existe
+    cliente = db.Clientes.buscar(dni)
+    if not cliente:
+        return "Cliente no encontrado."
 
-    def build(self):
-        # Top frame
-        frame = Frame(self)
-        frame.pack(padx=20, pady=10)
+    # Validar nombre
+    nombre_valido, nombre_error = validar_texto(nombre, "Nombre")
+    if not nombre_valido:
+        return nombre_error
 
-        # Labels
-        Label(frame, text="DNI (no editable)").grid(row=0, column=0)
-        Label(frame, text="Nombre (2 a 30 chars)").grid(row=0,column=1)
-        Label(frame, text="Apellido (2 a 30 chars)").grid(row=0,column=2)
+    # Validar apellido
+    apellido_valido, apellido_error = validar_texto(apellido, "Apellido")
+    if not apellido_valido:
+        return apellido_error
 
-        # Entries
-        dni = Entry(frame)
-        dni.grid(row=1, column=0)
-        nombre = Entry(frame)
-        nombre.grid(row=1, column=1)
-        nombre.bind("<KeyRelease>", lambda ev: self.validate(ev, 0))
-        apellido = Entry(frame)
-        apellido.grid(row=1, column=2)
-        apellido.bind("<KeyRelease>", lambda ev: self.validate(ev, 1))
+    # Modificar cliente
+    db.Clientes.modificar(dni, nombre, apellido)
+    return "Cliente modificado correctamente."
 
-        # Set entries initial values
-        cliente = self.master.treeview.focus()
-        campos = self.master.treeview.item(cliente, 'values')
-        dni.insert(0, campos[0])
-        dni.config(state=DISABLED)
-        nombre.insert(0, campos[1])
-        apellido.insert(0, campos[2])
+def borrar_cliente(dni):
+    if not dni:
+        return "Por favor, ingresa un DNI."
+    dni = dni.upper()
+    if not helpers.dni_valido(dni, []):  # Solo validar formato
+        return "DNI inválido. Debe tener el formato: 2 dígitos + 1 letra (ej. 12A)."
+    cliente = db.Clientes.borrar(dni)
+    return "Cliente borrado correctamente." if cliente else "Cliente no encontrado."
 
-        # Bottom frame
-        frame = Frame(self)
-        frame.pack(pady=10)
+def cerrar_programa():
+    sys.exit(0)
 
-        # Buttons
-        actualizar = Button(frame, text="Actualizar",
-        command=self.update_client)
-        actualizar.grid(row=0, column=0)
-        Button(frame, text="Cancelar", command=self.close).grid(row=0,column=1)
+import gradio as gr
 
-        # Update button activation
-        self.validaciones = [1, 1] # True, True
+def launch_ui():
+    with gr.Blocks(theme=gr.themes.Soft()) as demo:
+        gr.Markdown("# Gestor de Clientes - Interfaz Web")
 
-        # Class exports
-        self.actualizar = actualizar
-        self.dni = dni
-        self.nombre = nombre
-        self.apellido = apellido
+        with gr.Tab("Listar Clientes"):
+            listar_btn = gr.Button("Listar Clientes")
+            listar_text = gr.Textbox(label="Mensaje")
+            listar_table = gr.Dataframe(label="Clientes")
+            listar_btn.click(fn=listar_clientes, outputs=[listar_text, listar_table])
 
-    def validate(self, event, index):
-        valor = event.widget.get()
-        valido = (valor.isalpha() and len(valor) >= 2 and len(valor)
-        <= 30)
-        event.widget.configure({"bg": "Green" if valido else "Red"})
-        # Cambiar estado del botón en base a las validaciones
-        self.validaciones[index] = valido
-        self.actualizar.config(state=NORMAL if self.validaciones ==
-        [1, 1] else DISABLED)
+        with gr.Tab("Buscar Cliente"):
+            dni_buscar = gr.Textbox(label="DNI (2 dígitos + 1 letra, ej. 12A)")
+            buscar_btn = gr.Button("Buscar")
+            buscar_output = gr.Textbox(label="Resultado")
+            buscar_btn.click(fn=buscar_cliente, inputs=dni_buscar, outputs=buscar_output)
 
-    def update_client(self):
-        cliente = self.master.treeview.focus()
-        # Sobreescribir los datos
-        self.master.treeview.item(
-        cliente, values=(self.dni.get(), self.nombre.get(),
-        self.apellido.get()))
-        # !!! Modificar también en el fichero
-        db.Clientes.modificar(self.dni.get(), self.nombre.get(),
-        self.apellido.get())
-        self.close()
+        with gr.Tab("Añadir Cliente"):
+            dni_añadir = gr.Textbox(label="DNI (2 dígitos + 1 letra, ej. 12A)")
+            nombre_añadir = gr.Textbox(label="Nombre")
+            apellido_añadir = gr.Textbox(label="Apellido")
+            añadir_btn = gr.Button("Añadir")
+            añadir_output = gr.Textbox(label="Resultado")
+            añadir_btn.click(fn=añadir_cliente, inputs=[dni_añadir, nombre_añadir, apellido_añadir], outputs=añadir_output)
 
-    def close(self):
-        self.destroy()
-        self.update()
+        with gr.Tab("Modificar Cliente"):
+            dni_modificar = gr.Textbox(label="DNI (2 dígitos + 1 letra, ej. 12A)")
+            nombre_modificar = gr.Textbox(label="Nombre")
+            apellido_modificar = gr.Textbox(label="Apellido")
+            modificar_btn = gr.Button("Modificar")
+            modificar_output = gr.Textbox(label="Resultado")
+            modificar_btn.click(fn=modificar_cliente, inputs=[dni_modificar, nombre_modificar, apellido_modificar], outputs=modificar_output)
 
+        with gr.Tab("Borrar Cliente"):
+            dni_borrar = gr.Textbox(label="DNI (2 dígitos + 1 letra, ej. 12A)")
+            borrar_btn = gr.Button("Borrar")
+            borrar_output = gr.Textbox(label="Resultado")
+            borrar_btn.click(fn=borrar_cliente, inputs=dni_borrar, outputs=borrar_output)
 
+        with gr.Tab("Salir"):
+            salir_btn = gr.Button("Cerrar Programa")
+            salir_btn.click(fn=cerrar_programa)
 
-class MainWindow(Tk):
-    def __init__(self):
-        super().__init__()
-        self.title('Gestor de clientes')
-        self.build()
-
-    def build(self):
-        # Top Frame
-        frame = Frame(self)
-        frame.pack()
-
-        # Scrollbar
-        scrollbar = Scrollbar(frame) # new
-        scrollbar.pack(side=RIGHT, fill=Y) # new
-
-        # Treeview
-        treeview = ttk.Treeview(frame, yscrollcommand=scrollbar.set) # edited
-        treeview['columns'] = ('DNI', 'Nombre', 'Apellido')
-        treeview.pack()
-
-        # Column format
-        treeview.column("#0", width=0, stretch=NO)
-        treeview.column("DNI", anchor=CENTER)
-        treeview.column("Nombre", anchor=CENTER)
-        treeview.column("Apellido", anchor=CENTER)
-
-        # Heading format
-        treeview.heading("#0", anchor=CENTER)
-        treeview.heading("DNI", text="DNI", anchor=CENTER)
-        treeview.heading("Nombre", text="Nombre", anchor=CENTER)
-        treeview.heading("Apellido", text="Apellido", anchor=CENTER)
-
-        # Fill treeview data
-        for cliente in db.Clientes.lista:
-            treeview.insert(
-            parent='', index='end', iid=cliente.dni,
-            values=(cliente.dni, cliente.nombre, cliente.apellido))
-
-        # Export treeview to the class
-        self.treeview = treeview
-
-        # Pack
-        treeview.pack()
-
-        # Bottom Frame
-        frame = Frame(self)
-        frame.pack(pady=20)
-
-        # Buttons
-        Button(frame, text="Crear",command=self.create_client_window).grid(row=1, column=0)
-        Button(frame, text="Modificar", command=None).grid(row=1, column=1)
-        Button(frame, text="Borrar", command=self.delete).grid(row=1, column=2)
-
-    def create_client_window(self):
-        CreateClientWindow(self)
-
-    def delete(self):
-        cliente = self.treeview.focus()
-        if cliente:
-            campos = self.treeview.item(cliente, 'values')
-            confirmar = askokcancel(title='Confirmación', message=f'¿Borrar a {campos[1]} \
-            {campos[2]}?', icon=WARNING)
-        if confirmar:
-            self.treeview.delete(cliente)
-            # !!! Borrar también en el fichero
-            db.Clientes.borrar(campos[0])
-
-    def hola(self):
-        print("¡Hola mundo!")
-    
-
-    
-if __name__ == "__main__":
-    app = MainWindow()
-    app.mainloop()
+    demo.launch()
