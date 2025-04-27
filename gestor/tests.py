@@ -9,22 +9,25 @@ import gestor.helpers as helpers
 class TestDatabase(unittest.TestCase):
 
     def setUp(self):
-        # Configurar la ruta del archivo temporal para los tests
+        # Configurar la ruta del archivo temporal para los tests.
         config.DATABASE_PATH = os.path.join(os.path.dirname(__file__), "clientes_test.csv")
 
-        with open(config.DATABASE_PATH, "w", newline="\n") as fichero:
+        # Escribir un CSV temporal de test con los clientes iniciales.
+        with open(config.DATABASE_PATH, "w", newline='') as fichero:
             writer = csv.writer(fichero, delimiter=";")
             writer.writerow(['15J', 'Marta', 'Pérez'])
             writer.writerow(['48H', 'Manolo', 'López'])
             writer.writerow(['28Z', 'Ana', 'García'])
-
+        
+        # Forzar la recarga de la base de datos con la nueva ruta de test.
+        db.Clientes.cargar()
         self.clientes = db.Clientes()
 
     def tearDown(self):
-        # Limpiar el archivo temporal después de cada test
+        # Limpiar el archivo temporal después de cada test.
         if os.path.exists(config.DATABASE_PATH):
             os.remove(config.DATABASE_PATH)
-        # Limpiar la lista de clientes para evitar interferencias
+        # Limpiar la lista de clientes para evitar interferencias.
         self.clientes.lista_clientes.clear()
 
     def test_buscar_cliente(self):
@@ -56,12 +59,11 @@ class TestDatabase(unittest.TestCase):
         self.assertEqual(cliente_borrado.dni, '48H')
 
     def test_escritura_csv(self):
-
         self.clientes.borrar('48H')
         self.clientes.modificar('28Z', 'Mariana', 'Pérez')
         self.clientes.crear('39X', 'Héctor', 'Costa')
 
-        with open(config.DATABASE_PATH, newline="\n") as fichero:
+        with open(config.DATABASE_PATH, newline='') as fichero:
             reader = csv.reader(fichero, delimiter=";")
             datos = list(reader)
 
@@ -73,11 +75,11 @@ class TestDatabase(unittest.TestCase):
         self.assertEqual(datos, expected) 
 
     def test_dni_valido(self):
-        self.assertTrue(helpers.leer_texto(3, 3, "00A"))  
-        self.assertFalse(helpers.leer_texto(3, 3, "23223S"))  
-        self.assertFalse(helpers.leer_texto(3, 3, "F35")) 
-        self.assertTrue(helpers.leer_texto(3, 3, "48H"))       
-
+        self.assertTrue(helpers.dni_valido("00A", []))
+        self.assertFalse(helpers.dni_valido("23223S", []))
+        self.assertFalse(helpers.dni_valido("F35", []))
+        self.assertTrue(helpers.dni_valido("48H", []))
 
 if __name__ == '__main__':
     unittest.main()
+

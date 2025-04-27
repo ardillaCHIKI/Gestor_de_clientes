@@ -1,5 +1,5 @@
-gradio
-flake8
-pandas
 pytest
+flake8
 black
+gradio
+pandas
