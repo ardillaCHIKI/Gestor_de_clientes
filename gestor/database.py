@@ -1,5 +1,5 @@
-import csv  ###
-import config  ###
+import csv
+import gestor.config as config
 
 class Cliente:
     def __init__(self, dni, nombre, apellido):
@@ -11,10 +11,11 @@ class Cliente:
     
 class Clientes:
     # Creamos la lista y cargamos los clientes en memoria
-    lista = []
 
     @classmethod
     def cargar(cls):
+        if not hasattr(cls, 'lista_clientes'):
+            cls.lista_clientes = []
         cls.lista_clientes.clear()
         try:
             with open(config.DATABASE_PATH, newline="\n") as fichero:
@@ -24,6 +25,13 @@ class Clientes:
                     cls.lista_clientes.append(cliente)
         except FileNotFoundError:
             cls.lista_clientes = []
+
+    @classmethod
+    def guardar(cls):
+        with open(config.DATABASE_PATH, "w", newline="\n") as fichero:
+            writer = csv.writer(fichero, delimiter=";")
+            for c in cls.lista_clientes:
+                writer.writerow((c.dni, c.nombre, c.apellido))
 
     @classmethod
     def buscar(cls, dni):
@@ -57,13 +65,6 @@ class Clientes:
                 cls.guardar()
                 return cliente
         return None
-    
-    @classmethod
-    def guardar(cls):
-        with open(config.DATABASE_PATH, "w", newline="\n") as fichero:
-            writer = csv.writer(fichero, delimiter=";")
-            for c in cls.lista_clientes:
-                writer.writerow((c.dni, c.nombre, c.apellido))
 
     def __init__(self):
         self.cargar()                

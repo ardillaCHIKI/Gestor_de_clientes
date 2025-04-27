@@ -1,6 +1,6 @@
 import sys
 try:
-    from . import ui as gradio_ui
+    from from gestor import iu as gradio_ui
     from . import database as db
     from . import menu
 except ImportError:
