@@ -38,7 +38,7 @@ Sigue estos pasos para instalar y ejecutar el proyecto en tu máquina local:
 
 ## Uso
 1. Asegúrate de que todas las dependencias estén instaladas correctamente.
-2. Ejecuta la aplicación con el siguiente comando (asegúrate de reemplazar `run.py` con el nombre correcto del archivo principal si es diferente):
+2. Ejecuta la aplicación con el siguiente comando:
     ```bash
     python run.py
     ```
@@ -69,9 +69,4 @@ El proyecto está organizado de la siguiente manera:
     ```
 5. Abre un pull request en GitHub.
 
-## Licencia
-Este proyecto está licenciado bajo la Licencia MIT. Consulta el archivo `LICENSE` para más detalles.
-
-## Contacto
-Si tienes preguntas o sugerencias, no dudes en abrir un issue en el repositorio o contactarme directamente a través de mi perfil de GitHub.
 
